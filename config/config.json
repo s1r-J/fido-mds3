@@ -4,13 +4,13 @@
 {
   "mds": {
     "url": "https://mds.fidoalliance.org/",  /* MDS3 BLOB download url. */
-    "file": "{approot}/data/blob.jwt"        /* MDS3 BLOB file path. "{approot}" is replaced by module's root path. */
+    "file": "../data/blob.jwt"               /* MDS3 BLOB file path. */
   },
   "payload": {
-    "file": "{approot}/data/payload.json"    /* MDS3 BLOB payload file path. "{approot}" is replaced by module's root path. */
+    "file": "../data/payload.json"           /* MDS3 BLOB payload file path. */
   },
   "root": {
     "url": "http://secure.globalsign.com/cacert/root-r3.crt",  /* root GS-R3 certificate url. */
-    "file": "{approot}/cert/root-r3.crt"                       /* root GS-R3 certificate file. "{approot}" is replaced by module's root path. */
+    "file": "../cert/root-r3.crt"                              /* root GS-R3 certificate file. */
   }
 }

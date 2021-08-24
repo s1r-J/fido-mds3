@@ -1,4 +1,5 @@
 import fs from 'fs';
+import path from 'path';
 import appRoot from 'app-root-path';
 import axios from 'axios';
 import base64url from 'base64url';
@@ -826,25 +827,16 @@ class Builder {
   private config: FidoMds3Config;
 
   constructor(config?: Partial<FidoMds3Config>) {
-    const configJson = fs.readFileSync(appRoot.resolve('config/config.json').toString(), 'utf-8');
+    const configJson = fs.readFileSync(path.resolve(__dirname, '../config/config.json'), 'utf-8');
     const defaultConfig = parse(configJson);
 
     this.config = {
       mdsUrl:  (config && config.mdsUrl) || new URL(defaultConfig.mds.url),
-      mdsFile: (config && config.mdsFile) || this.replaceAppRoot(defaultConfig.mds.file),
-      payloadFile: (config && config.payloadFile) || this.replaceAppRoot(defaultConfig.payload.file),
+      mdsFile: (config && config.mdsFile) || path.resolve(__dirname, defaultConfig.mds.file),
+      payloadFile: (config && config.payloadFile) || path.resolve(__dirname, defaultConfig.payload.file),
       rootUrl: (config && config.rootUrl) || new URL(defaultConfig.root.url),
-      rootFile: (config && config.rootFile) || this.replaceAppRoot(defaultConfig.root.file),
+      rootFile: (config && config.rootFile) || path.resolve(__dirname, defaultConfig.root.file),
     };
-  }
-
-  private replaceAppRoot(path: string): string {
-    if (path.indexOf('{approot}') !== -1) {
-      console.log(appRoot.resolve(path.replace('{approot}', '')));
-      return appRoot.resolve(path.replace('{approot}', ''));
-    }
-
-    return path;
   }
 
   mdsUrl(mdsUrl: URL): Builder {
