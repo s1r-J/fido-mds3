@@ -54,7 +54,6 @@ test('Authenticator identifier FIDO2', async function (t) {
 test('Authenticator identifier UAF', async function (t) {
   const Client = new FM3.Builder().build();
   const data = await Client.findMetadata('0066#0001');
-  console.log(data);
   if (data) {
     t.type(data, 'object');
     t.equal(data.aaid, '0066#0001');
