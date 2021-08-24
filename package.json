@@ -1,0 +1,52 @@
+{
+  "name": "fido-mds3",
+  "version": "0.1.0",
+  "description": "Module to help access to FIDO Alliance Metadata Service v3.",
+  "main": "index.js",
+  "scripts": {
+    "test": "npm run clean && npm run build && tap __test__/ --ts",
+    "clean": "rm -f dist/*",
+    "build": "tsc"
+  },
+  "keywords": [
+    "fido",
+    "fido2",
+    "uaf",
+    "u2f",
+    "metadata",
+    "mds",
+    "authenticator",
+    "webauthn"
+  ],
+  "author": "s1r-J",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/s1r-J/fido-mds3.git"
+  },
+  "bugs": {
+    "url": "https://github.com/s1r-J/fido-mds3/issues"
+  },
+  "homepage": "https://github.com/s1r-J/fido-mds3#readme",
+  "dependencies": {
+    "app-root-path": "^3.0.0",
+    "axios": "^0.21.1",
+    "comment-json": "^4.1.1",
+    "jsrsasign": "^10.4.0",
+    "jsrsasign-util": "^1.0.5",
+    "moment": "^2.29.1",
+    "node-forge": "^0.10.0",
+    "str2ab": "^1.0.1"
+  },
+  "devDependencies": {
+    "@types/app-root-path": "^1.2.4",
+    "@types/comment-json": "^2.4.2",
+    "@types/jsrsasign": "^8.0.13",
+    "@types/node": "^16.7.1",
+    "@types/node-forge": "^0.10.3",
+    "@types/tap": "^15.0.5",
+    "tap": "^15.0.9",
+    "ts-node": "^10.2.1",
+    "typescript": "^4.3.5"
+  }
+}
