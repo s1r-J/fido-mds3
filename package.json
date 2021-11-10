@@ -37,7 +37,6 @@
   },
   "homepage": "https://github.com/s1r-J/fido-mds3#readme",
   "dependencies": {
-    "app-root-path": "^3.0.0",
     "axios": "^0.21.1",
     "comment-json": "^4.1.1",
     "jsrsasign": "^10.4.0",
