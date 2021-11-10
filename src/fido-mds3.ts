@@ -1,9 +1,8 @@
 import fs from 'fs';
 import path from 'path';
-import appRoot from 'app-root-path';
 import axios from 'axios';
 import base64url from 'base64url';
-import jose from 'jsrsasign';
+import rs from 'jsrsasign';
 import moment from 'moment';
 import {
   pki,
@@ -628,13 +627,13 @@ class Client {
     for (let x5c of x5cArray) {
       let certKeyString = ['-----BEGIN CERTIFICATE-----', x5c, "-----END CERTIFICATE-----"].join('\n');
       certKeysPki.push(pki.certificateFromPem(certKeyString));
-      let certKey = jose.X509.getPublicKeyFromCertPEM(certKeyString);
-      let certKeyPem = jose.KEYUTIL.getPEM(certKey);
+      let certKey = rs.X509.getPublicKeyFromCertPEM(certKeyString);
+      let certKeyPem = rs.KEYUTIL.getPEM(certKey);
       certKeys.push(certKeyPem);
     }
 
     const alg = headerJSON['alg'];
-    const isValid = jose.KJUR.jws.JWS.verifyJWT(blobJwt, certKeys[0], {alg: [alg]});
+    const isValid = rs.KJUR.jws.JWS.verifyJWT(blobJwt, certKeys[0], {alg: [alg]});
     if (!isValid) {
       throw new FM3SettingError('JWS cannot be verified.');
     }
