@@ -1,9 +1,9 @@
 {
   "name": "fido-mds3",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "description": "Module to help access to FIDO Alliance Metadata Service v3.",
   "main": "index.js",
-  "types": "./dist/str2ab.d.ts",
+  "types": "./dist/fido-mds3.d.ts",
   "files": [
     "index.js",
     "dist/",
@@ -37,23 +37,22 @@
   },
   "homepage": "https://github.com/s1r-J/fido-mds3#readme",
   "dependencies": {
-    "axios": "^0.21.1",
+    "axios": "^0.21.4",
     "comment-json": "^4.1.1",
-    "jsrsasign": "^10.4.0",
+    "jsrsasign": "^10.4.1",
     "jsrsasign-util": "^1.0.5",
     "moment": "^2.29.1",
     "node-forge": "^0.10.0",
     "str2ab": "^1.0.1"
   },
   "devDependencies": {
-    "@types/app-root-path": "^1.2.4",
     "@types/comment-json": "^2.4.2",
     "@types/jsrsasign": "^8.0.13",
-    "@types/node": "^16.7.1",
-    "@types/node-forge": "^0.10.3",
+    "@types/node": "^16.11.7",
+    "@types/node-forge": "^0.10.9",
     "@types/tap": "^15.0.5",
-    "tap": "^15.0.9",
-    "ts-node": "^10.2.1",
-    "typescript": "^4.3.5"
+    "tap": "^15.0.10",
+    "ts-node": "^10.4.0",
+    "typescript": "^4.4.4"
   }
 }
