@@ -3,6 +3,7 @@ on:
   schedule:
     # 0:00(GMT) on the second day of every month
     - cron: '0 0 2 * *'
+  workflow_dispatch:
 
 jobs:
   update:
