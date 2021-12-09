@@ -1,2 +1,2 @@
-module.exports = require('./dist/fido-mds3').default;
+module.exports = require('./dist/index').default;
 module.exports.default = module.exports;

@@ -3,7 +3,7 @@
   "version": "0.2.0",
   "description": "Module to help access to FIDO Alliance Metadata Service v3.",
   "main": "index.js",
-  "types": "./dist/fido-mds3.d.ts",
+  "types": "./dist/index.d.ts",
   "files": [
     "index.js",
     "dist/",
@@ -13,8 +13,8 @@
   ],
   "scripts": {
     "test": "npm run clean && npm run build && tap __test__/ --ts",
-    "clean": "rm -f dist/*",
-    "build": "tsc"
+    "clean": "rm -rf dist/*",
+    "build": "npm run clean && tsc"
   },
   "keywords": [
     "fido",
