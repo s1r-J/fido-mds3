@@ -28,6 +28,7 @@ jobs:
       run: |
         git config --global user.email "s1r.aria.azureglo@gmail.com"
         git config --global user.name "s1r-J"
+        git config --global pull.ff only
         git add .
         git commit -m "Update $(date +'%Y-%m-%d')"
         git pull origin main
