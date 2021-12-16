@@ -1,13 +1,23 @@
+type AccessMds = 'url' | 'file' | 'jwt';
+type AccessRootCertificate = 'url' | 'file' | 'pem';
+
 /**
  * This module's config.
  */
 interface FidoMds3Config {
   mdsUrl: URL;
   mdsFile: string;
+  mdsJwt?: string;
   payloadFile: string;
   rootUrl: URL;
   rootFile: string;
+  rootPem?: string;
+
+  accessMds: AccessMds;
+  accessRootCertificate: AccessRootCertificate;
 }
+
+type FM3FindOption = 'needed' | 'force' | 'error';
 
 /**
  * The metadataStatement JSON object.
@@ -515,7 +525,7 @@ interface FM3BiometricStatusReport {
    * ISO-8601 formatted date since when the certLevel achieved, if applicable.
    * @see https://fidoalliance.org/specs/mds/fido-metadata-service-v3.0-ps-20210518.html#dom-biometricstatusreport-effectivedate
    */
-  effectiveData?: string;
+  effectiveDate?: string;
 
   /**
    * Describes the externally visible aspects of the Biometric Certification evaluation.
@@ -583,7 +593,7 @@ interface FM3StatusReport {
    * ISO-8601 formatted date since when the status code was set, if applicable. If no date is given, the status is assumed to be effective while present.
    * @see https://fidoalliance.org/specs/mds/fido-metadata-service-v3.0-ps-20210518.html#dom-statusreport-effectivedate
    */
-  effectiveData?: string;
+  effectiveDate?: string;
 
   /**
    * The authenticatorVersion that this status report relates to.
@@ -719,6 +729,7 @@ interface FM3MetadataBLOBPayloadEntry {
 
 export {
   FidoMds3Config,
+  FM3FindOption,
   FM3MetadataStatement,
   FM3BiometricStatusReport,
   FM3AuthenticatorStatus,

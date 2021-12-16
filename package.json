@@ -12,7 +12,7 @@
     "data"
   ],
   "scripts": {
-    "test": "npm run clean && npm run build && tap __test__/ --ts",
+    "test": "npm run clean && npm run build && tap __test__/**/* --ts --no-check-coverage --timeout=300",
     "clean": "rm -rf dist/*",
     "build": "npm run clean && tsc"
   },
@@ -39,9 +39,9 @@
   "dependencies": {
     "axios": "^0.21.4",
     "comment-json": "^4.1.1",
+    "dayjs": "^1.10.7",
     "jsrsasign": "^10.4.1",
     "jsrsasign-util": "^1.0.5",
-    "moment": "^2.29.1",
     "node-forge": "^0.10.0",
     "str2ab": "^1.0.1"
   },
@@ -51,7 +51,7 @@
     "@types/node": "^16.11.7",
     "@types/node-forge": "^0.10.9",
     "@types/tap": "^15.0.5",
-    "tap": "^15.0.10",
+    "tap": "^15.1.5",
     "ts-node": "^10.4.0",
     "typescript": "^4.4.4"
   }

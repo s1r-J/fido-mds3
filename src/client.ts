@@ -1,104 +1,113 @@
+import dayjs from 'dayjs';
 import fs from 'fs';
-import axios from 'axios';
-import base64url from 'base64url';
-import rs from 'jsrsasign';
-import moment from 'moment';
-import {
-  pki,
-} from 'node-forge';
 
 import {
+  FM3FindOption,
   FidoMds3Config,
   FM3MetadataBLOBPayloadEntry,
 } from './type';
+import MdsPayloadEntry from './models/mdsPayloadEntry';
 import FM3InvalidParameterError from './errors/invalidParameterError';
 import FM3SettingError from './errors/settingError';
+import FM3OldDataError from './errors/oldDataError';
+import Accessor from './accessor';
 
 class Client {
 
   private config: FidoMds3Config;
-  legalHeader? : string;
   updatedAt?: Date;
+  legalHeader? : string;
   no?: number;
   nextUpdateAt?: Date;
   entries?: FM3MetadataBLOBPayloadEntry[];
 
   constructor(config: FidoMds3Config) {
-    this.config = config;
-    this.load();
+    this.config = config;                                                                                                                                                                                                                                                                         
   }
 
-  async refresh() {
-    const mdsFileResponse = await axios.get(this.config.mdsUrl.toString());
-    fs.writeFileSync(this.config.mdsFile, mdsFileResponse.data, 'utf-8');
-
-    this.verifyCertification(mdsFileResponse.data);
-
-    this.parse(mdsFileResponse.data);
+  static async create(config: FidoMds3Config): Promise<Client> {
+    const client = new Client(config);
+    await client.load();
+    return client;
   }
 
-  private async verifyCertification(blobJwt: string) {
-    const [header, payload, signature] = blobJwt.split('.');
-    if (!header || !payload || !signature) {
-      throw new FM3SettingError('Blob file does not have three dot.');
-    }
-
-    const headerJSON = JSON.parse(base64url.decode(header));
-    const x5cArray = headerJSON['x5c'];
-    const certKeysPki = []
-    const certKeys = [];
-    for (const x5c of x5cArray) {
-      const certKeyString = ['-----BEGIN CERTIFICATE-----', x5c, "-----END CERTIFICATE-----"].join('\n');
-      certKeysPki.push(pki.certificateFromPem(certKeyString));
-      const certKey = rs.X509.getPublicKeyFromCertPEM(certKeyString);
-      const certKeyPem = rs.KEYUTIL.getPEM(certKey);
-      certKeys.push(certKeyPem);
-    }
-
-    const alg = headerJSON['alg'];
-    const isValid = rs.KJUR.jws.JWS.verifyJWT(blobJwt, certKeys[0], {alg: [alg]});
-    if (!isValid) {
-      throw new FM3SettingError('JWS cannot be verified.');
-    }
-
-    // verify certificate chain
-    // [ssl - Using node.js to verify a X509 certificate with CA cert - Stack Overflow](https://stackoverflow.com/questions/48377731/using-node-js-to-verify-a-x509-certificate-with-ca-cert)
-    const rootCrtResponse = await axios.get(this.config.rootUrl.toString());
-    fs.writeFileSync(this.config.rootFile, rootCrtResponse.data, 'utf-8');
-    const cert = pki.certificateFromPem(rootCrtResponse.data);
-    const caStore = pki.createCaStore([ ...certKeysPki, cert ]);
-    const result = pki.verifyCertificateChain(caStore, [ cert ]);
-    if (!result) {
-      throw new FM3SettingError('Certificate chain cannot be verified.');
-    }
-  }
-
-  private async parse(blobJwt: string) {
-    const [, payload,] = blobJwt.split('.');
-    const payloadString = base64url.decode(payload);
-    const payloadJSON = JSON.parse(payloadString);
-    fs.writeFileSync(this.config.payloadFile, payloadString, 'utf-8');
-
-    this.format(payloadJSON);
-    
-    this.updatedAt = moment().toDate();
+  async refresh(): Promise<void> {
+    await this.load();
   }
 
   private format(payloadJSON: any) {
-    this.legalHeader = payloadJSON['legalHeader'];
-    this.no = payloadJSON['no'];
-    this.nextUpdateAt = moment.utc(payloadJSON['nextUpdate'], 'YYYY-MM-DD').toDate();
     const entriesJSONArray = payloadJSON['entries'];
-
     this.entries = [];
     for (let ent of entriesJSONArray) {
       this.entries.push(ent as FM3MetadataBLOBPayloadEntry); // XXX danger
     }
+
+    this.updatedAt = dayjs().toDate();
+    this.legalHeader = payloadJSON['legalHeader'];
+    this.no = payloadJSON['no'];
+    this.nextUpdateAt = dayjs(payloadJSON['nextUpdate'], 'YYYY-MM-DD').toDate();
   }
 
   private async load() {
-    const payloadJSON = JSON.parse(fs.readFileSync(this.config.payloadFile, 'utf-8'));
-    this.format(payloadJSON);
+
+    // set root certificate
+    Accessor.detachRootCert();
+    switch (this.config.accessRootCertificate) {
+      case 'url':
+        await Accessor.setRootCertUrl(this.config.rootUrl);
+        break;
+      case 'file':
+        await Accessor.setRootCertFile(this.config.rootFile);
+        break;
+      case 'pem':
+        if (!this.config.rootPem) {
+          throw new FM3SettingError('Please set root certificate pem.');
+        }
+        Accessor.setRootCertPem(this.config.rootPem);
+        break;
+      default:
+        throw new FM3SettingError('Please set how to access root certificate.');
+    }
+
+    // set mds data
+    switch (this.config.accessMds) {
+      case 'url':
+        await Accessor.fromUrl(this.config.mdsUrl);
+        break;
+      case 'file':
+        const jwtStr = fs.readFileSync(this.config.mdsFile, 'utf-8');
+        await Accessor.fromJwt(jwtStr);
+        break;
+      case 'jwt':
+        if (!this.config.mdsJwt) {
+          throw new FM3SettingError('Please set mds jwt.');
+        }
+        await Accessor.fromJwt(this.config.mdsJwt);
+        break;
+      default:
+        throw new FM3SettingError('Please set how to access MDS.');
+    }
+
+    await Accessor.toFile(this.config.payloadFile);  // deprecated
+    const data = Accessor.toJsonObject();
+    this.format(data);
+  }
+
+  private async judgeRefresh(refresh?: boolean | FM3FindOption) {
+    let option: FM3FindOption = 'needed';
+    if (typeof refresh === 'boolean') {
+      option = refresh ? 'force' : 'needed';
+    } else if (refresh != null) {
+      option = refresh;
+    }
+
+    if (option === 'force') {
+      await this.refresh();
+    } else if (option === 'needed' && (!this.entries || (this.nextUpdateAt && dayjs(this.nextUpdateAt).isBefore(dayjs())))) {
+      await this.refresh();
+    } else if (option === 'error' && (!this.entries || (this.nextUpdateAt && dayjs(this.nextUpdateAt).isBefore(dayjs())))) {
+      throw new FM3OldDataError(`Metadata is old. Update at ${this.nextUpdateAt && dayjs(this.nextUpdateAt).toISOString()}`, this.nextUpdateAt);
+    }
   }
 
   /**
@@ -112,15 +121,13 @@ class Client {
    * @param refresh if true force to fetch Metadata BLOB, if false depends on update date
    * @returns Metadata entry if not find return null
    */
-  async findByAAGUID(aaguid: string, refresh?: boolean): Promise<FM3MetadataBLOBPayloadEntry | null> {
+  async findByAAGUID(aaguid: string, refresh?: boolean | FM3FindOption): Promise<FM3MetadataBLOBPayloadEntry | null> {
 
     if (!aaguid) {
       throw new FM3InvalidParameterError('"aaguid" is empty.');
     }
 
-    if (refresh || !this.entries || (this.nextUpdateAt && moment(this.nextUpdateAt).isBefore(moment()))) {
-      await this.refresh();
-    }
+    await this.judgeRefresh(refresh);
     if (!this.entries) {
       throw new FM3SettingError('Metadata cannot be fetched.');
     }
@@ -139,6 +146,15 @@ class Client {
     return null;
   }
 
+  async findModelByAAGUID(aaguid: string, refresh?: boolean | FM3FindOption): Promise<MdsPayloadEntry | null> {
+    const entry = await this.findByAAGUID(aaguid, refresh);
+    if (entry) {
+      return new MdsPayloadEntry(entry);
+    }
+
+    return null;
+  }
+
   /**
    * Find FIDO UAF authenticator by AAID.
    * 
@@ -150,15 +166,13 @@ class Client {
    * @param refresh if true force to fetch Metadata BLOB, if false depends on update date.
    * @returns Metadata entry if not find return null
    */
-  async findByAAID(aaid: string, refresh?: boolean): Promise<FM3MetadataBLOBPayloadEntry | null> {
+  async findByAAID(aaid: string, refresh?: boolean | FM3FindOption): Promise<FM3MetadataBLOBPayloadEntry | null> {
 
     if (!aaid) {
       throw new FM3InvalidParameterError('"aaid" is empty.');
     }
 
-    if (refresh || !this.entries || (this.nextUpdateAt && moment(this.nextUpdateAt).isBefore(moment()))) {
-      await this.refresh();
-    }
+    await this.judgeRefresh(refresh);
     if (!this.entries) {
       throw new FM3SettingError('Metadata cannot be fetched.');
     }
@@ -177,6 +191,15 @@ class Client {
     return null;
   }
 
+  async findModelByAAID(aaid: string, refresh?: boolean | FM3FindOption): Promise<MdsPayloadEntry | null> {
+    const entry = await this.findByAAID(aaid, refresh);
+    if (entry) {
+      return new MdsPayloadEntry(entry);
+    }
+
+    return null;
+  }
+
   /**
    * Find FIDO U2F authenticator by AttestationCertificateKeyIdentifier.
    * 
@@ -188,15 +211,13 @@ class Client {
    * @param refresh if true force to fetch Metadata BLOB, if false depends on update date
    * @returns Metadata entry if not find return null
    */
-  async findByAttestationCertificateKeyIdentifier(attestationCertificateKeyIdentifier: string, refresh?: boolean): Promise<FM3MetadataBLOBPayloadEntry | null> {
+  async findByAttestationCertificateKeyIdentifier(attestationCertificateKeyIdentifier: string, refresh?: boolean | FM3FindOption): Promise<FM3MetadataBLOBPayloadEntry | null> {
 
     if (!attestationCertificateKeyIdentifier) {
       throw new FM3InvalidParameterError('"attestationCertificateKeyIdentifiers" is empty.');
     }
 
-    if (refresh || !this.entries || (this.nextUpdateAt && moment(this.nextUpdateAt).isBefore(moment()))) {
-      await this.refresh();
-    }
+    await this.judgeRefresh(refresh);
     if (!this.entries) {
       throw new FM3SettingError('Metadata cannot be fetched.');
     }
@@ -219,6 +240,16 @@ class Client {
     return null;
   }
 
+  async findModelByAttestationCertificateKeyIdentifier(attestationCertificateKeyIdentifier: string, refresh?: boolean | FM3FindOption): Promise<MdsPayloadEntry | null> {
+    const entry = await this.findByAttestationCertificateKeyIdentifier(attestationCertificateKeyIdentifier, refresh);
+    if (entry) {
+      return new MdsPayloadEntry(entry);
+    }
+
+    return null;
+  }
+
+  
   /**
    * Find FIDO(FIDO2, FIDO UAF and FIDO U2F) authenticator.
    * 
@@ -226,17 +257,39 @@ class Client {
    * @param refresh if true force to fetch Metadata BLOB, if false depends on update date
    * @returns Metadata entry if not find return null
    */
-  async findMetadata(identifier: string, refresh?: boolean): Promise<FM3MetadataBLOBPayloadEntry | null> {
-
+  async findMetadata(identifier: string, refresh?: boolean | FM3FindOption): Promise<FM3MetadataBLOBPayloadEntry | null> {
     const findFunctions = [this.findByAAGUID, this.findByAAID, this.findByAttestationCertificateKeyIdentifier];
     let isAlreadyRefresh = false;
     for (let func of findFunctions) {
-      let ent = await func.call(this, identifier, refresh && !isAlreadyRefresh);
+      let option: FM3FindOption;
+      switch (refresh) {
+        case 'error':
+          option = 'error';
+          break;
+        case 'force':
+        case true:
+          option = isAlreadyRefresh ? 'needed' : 'force';
+          break;
+        case 'needed':
+        case false:
+        default:
+          option = 'needed';
+      }
+      const ent = await func.call(this, identifier, option);
       if (ent) {
         return ent;
       }
 
       isAlreadyRefresh = true;
+    }
+
+    return null;
+  }
+
+  async findMetadataModel(identifier: string, refresh?: boolean | FM3FindOption): Promise<MdsPayloadEntry | null> {
+    const entry = await this.findMetadata(identifier, refresh);
+    if (entry) {
+      return new MdsPayloadEntry(entry);
     }
 
     return null;
