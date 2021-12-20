@@ -10,10 +10,19 @@ import {
 import FM3InvalidParameterError from './errors/invalidParameterError';
 import Client from './client';
 
+/**
+ * Builder class builds client class which finds authenticator's information, following config.
+ */
 class Builder {
 
   private config: FidoMds3Config;
 
+  /**
+   * Builder class constructor.
+   * 
+   * @constructor
+   * @param config
+   */
   constructor(config?: Partial<FidoMds3Config>) {
     const configJson = fs.readFileSync(path.resolve(__dirname, '../config/config.json'), 'utf-8');
     const defaultConfig = parse(configJson);
@@ -52,6 +61,12 @@ class Builder {
     };
   }
 
+  /**
+   * Set metadata service URL.
+   * 
+   * @param mdsUrl Metadata service URL
+   * @returns Builder class
+   */
   mdsUrl(mdsUrl: URL): Builder {
     if (!mdsUrl) {
       throw new FM3InvalidParameterError('"mdsUrl" is empty.');
@@ -62,6 +77,12 @@ class Builder {
     return this;
   }
 
+  /**
+   * Set metadata service JWT file path.
+   * 
+   * @param mdsFile Metadata service JWT file path
+   * @returns Builder class
+   */
   mdsFile(mdsFile: string): Builder {
     if (!mdsFile) {
       throw new FM3InvalidParameterError('"mdsFile" is empty.');
@@ -72,6 +93,12 @@ class Builder {
     return this;
   }
 
+  /**
+   * Set metadata service JWT string.
+   * 
+   * @param mdsJwt Metadata service JWT string
+   * @returns Builder class
+   */
   mdsJwt(mdsJwt: string): Builder {
     if (!mdsJwt) {
       throw new FM3InvalidParameterError('"mdsJwt" is empty.');
@@ -82,6 +109,13 @@ class Builder {
     return this;
   }
 
+  /**
+   * Set file path which metadata service payload is saved in.
+   * 
+   * @deprecated
+   * @param payloadFile Metadata service payload file path
+   * @returns Builder class
+   */
   payloadFile(payloadFile: string): Builder {
     if (!payloadFile) {
       throw new FM3InvalidParameterError('"payloadFile" is empty.');
@@ -91,6 +125,12 @@ class Builder {
     return this;
   }
 
+  /**
+   * Set metadata service root certificate file URL.
+   * 
+   * @param rootUrl Metadata service root certificate file URL
+   * @returns Builder class
+   */
   rootUrl(rootUrl: URL): Builder {
     if (!rootUrl) {
       throw new FM3InvalidParameterError('"rootUrl" is empty.');
@@ -101,6 +141,12 @@ class Builder {
     return this;
   }
 
+  /**
+   * Set metadata service root certificate file path.
+   * 
+   * @param rootFile Metadata service root certificate file
+   * @returns Builder class
+   */
   rootFile(rootFile: string): Builder {
     if (!rootFile) {
       throw new FM3InvalidParameterError('"rootFile" is empty.');
@@ -111,6 +157,12 @@ class Builder {
     return this;
   }
 
+  /**
+   * Set metadata service root certificate PEM.
+   * 
+   * @param rootPem Metadata service root certificate PEM
+   * @returns Builder class
+   */
   rootPem(rootPem: string): Builder {
     if (!rootPem) {
       throw new FM3InvalidParameterError('"rootPem" is empty.');
@@ -121,10 +173,24 @@ class Builder {
     return this;
   }
 
+  /**
+   * Build client class.
+   * Client class which is returned by this method does not prepare authenticator info yet. 
+   * Please compare to buildAsync method.
+   * 
+   * @returns Client class
+   */
   build(): Client {
     return new Client(this.config);
   }
 
+  /**
+   * Build client class.
+   * Client class which is returned by this method already prepare authenticator info. 
+   * Please compare to build method.
+   * 
+   * @returns Client class
+   */
   async buildAsync(): Promise<Client> {
     return await Client.create(this.config);
   }

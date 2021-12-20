@@ -1,4 +1,19 @@
+/**
+ * How to access metadata service data.
+ * 
+ * url: download from metadata service's endpoint URL
+ * file: read from metadata service jwt file's path
+ * jwt: use jwt string in args
+ */
 type AccessMds = 'url' | 'file' | 'jwt';
+
+/**
+ * How to access metadata service's root certificate.
+ * 
+ * url: download from root certificate's endpoint URL.
+ * file: read from root certificate DER file's path.
+ * pem: use pem string in args.
+ */
 type AccessRootCertificate = 'url' | 'file' | 'pem';
 
 /**
@@ -17,11 +32,17 @@ interface FidoMds3Config {
   accessRootCertificate: AccessRootCertificate;
 }
 
-type FM3FindOption = 'needed' | 'force' | 'error';
+/**
+ * Specify behavior refreshing metadata payload when finding authenticator info.
+ * 
+ * needed: if metadata payload is old, refresh data.
+ * force: always refresh data.
+ * error: if metadata payload is old, throw error.
+ */
+type FM3RefreshOption = 'needed' | 'force' | 'error';
 
 /**
  * The metadataStatement JSON object.
- * 
  * @see https://fidoalliance.org/specs/mds/fido-metadata-statement-v3.0-ps-20210518.html#metadata-keys
  */
 interface FM3MetadataStatement {
@@ -729,7 +750,7 @@ interface FM3MetadataBLOBPayloadEntry {
 
 export {
   FidoMds3Config,
-  FM3FindOption,
+  FM3RefreshOption,
   FM3MetadataStatement,
   FM3BiometricStatusReport,
   FM3AuthenticatorStatus,

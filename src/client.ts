@@ -2,7 +2,7 @@ import dayjs from 'dayjs';
 import fs from 'fs';
 
 import {
-  FM3FindOption,
+  FM3RefreshOption,
   FidoMds3Config,
   FM3MetadataBLOBPayloadEntry,
 } from './type';
@@ -12,25 +12,60 @@ import FM3SettingError from './errors/settingError';
 import FM3OldDataError from './errors/oldDataError';
 import Accessor from './accessor';
 
+/**
+ * Client class finds authenticator information from metadata service by authenticator model identifier(AAGUID etc.).
+ * 
+ */
 class Client {
 
   private config: FidoMds3Config;
+
   updatedAt?: Date;
+
+  /**
+   * Legal agreement for using the MDS.
+   */
   legalHeader? : string;
+  /**
+   * Serial number of this UAF Metadata BLOB Payload.
+   */
   no?: number;
+  /**
+   * Date when the next update is expected for entries in this instance.
+   */
   nextUpdateAt?: Date;
+  /**
+   * Array of MetadataBLOBPayloadEntry object which is each authenticator model info.
+   */
   entries?: FM3MetadataBLOBPayloadEntry[];
 
+  /**
+   * Client class constructor.
+   * This constructor does not load authenticator model infos yet.
+   * Please compare to create method.
+   * 
+   * @param config
+   */
   constructor(config: FidoMds3Config) {
     this.config = config;                                                                                                                                                                                                                                                                         
   }
 
+  /**
+   * Create the instance of client class and load authenticator model infos.
+   * Please compare to constructor.
+   * 
+   * @param config 
+   * @returns Instance of client class
+   */
   static async create(config: FidoMds3Config): Promise<Client> {
     const client = new Client(config);
     await client.load();
     return client;
   }
 
+  /**
+   * Updates authenticator model infos.
+   */
   async refresh(): Promise<void> {
     await this.load();
   }
@@ -39,7 +74,7 @@ class Client {
     const entriesJSONArray = payloadJSON['entries'];
     this.entries = [];
     for (let ent of entriesJSONArray) {
-      this.entries.push(ent as FM3MetadataBLOBPayloadEntry); // XXX danger
+      this.entries.push(ent as FM3MetadataBLOBPayloadEntry); // XXX danger, should validate entry?
     }
 
     this.updatedAt = dayjs().toDate();
@@ -48,6 +83,10 @@ class Client {
     this.nextUpdateAt = dayjs(payloadJSON['nextUpdate'], 'YYYY-MM-DD').toDate();
   }
 
+  /**
+   * Load authenticator infos to this instance, following config.
+   * 
+   */
   private async load() {
 
     // set root certificate
@@ -93,8 +132,8 @@ class Client {
     this.format(data);
   }
 
-  private async judgeRefresh(refresh?: boolean | FM3FindOption) {
-    let option: FM3FindOption = 'needed';
+  private async judgeRefresh(refresh?: boolean | FM3RefreshOption) {
+    let option: FM3RefreshOption = 'needed';
     if (typeof refresh === 'boolean') {
       option = refresh ? 'force' : 'needed';
     } else if (refresh != null) {
@@ -111,17 +150,17 @@ class Client {
   }
 
   /**
-   * Find FIDO2 authenticator by AAGUID.
+   * Find FIDO2 authenticator info by AAGUID.
    * 
    * Note: FIDO UAF authenticators support AAID, but they don’t support AAGUID.<br/>
    * Note: FIDO2 authenticators support AAGUID, but they don’t support AAID.<br/>
    * Note: FIDO U2F authenticators do not support AAID nor AAGUID, but they use attestation certificates dedicated to a single authenticator model.<br/>
    * 
    * @param aaguid FIDO2 authenticator AAGUID
-   * @param refresh if true force to fetch Metadata BLOB, if false depends on update date
+   * @param refresh if true force to fetch Metadata BLOB, if false depends on update date or follows FM3RefreshOption
    * @returns Metadata entry if not find return null
    */
-  async findByAAGUID(aaguid: string, refresh?: boolean | FM3FindOption): Promise<FM3MetadataBLOBPayloadEntry | null> {
+  async findByAAGUID(aaguid: string, refresh?: boolean | FM3RefreshOption): Promise<FM3MetadataBLOBPayloadEntry | null> {
 
     if (!aaguid) {
       throw new FM3InvalidParameterError('"aaguid" is empty.');
@@ -146,7 +185,18 @@ class Client {
     return null;
   }
 
-  async findModelByAAGUID(aaguid: string, refresh?: boolean | FM3FindOption): Promise<MdsPayloadEntry | null> {
+  /**
+   * Find FIDO2 authenticator info class by AAGUID and return in model class .
+   * 
+   * Note: FIDO UAF authenticators support AAID, but they don’t support AAGUID.<br/>
+   * Note: FIDO2 authenticators support AAGUID, but they don’t support AAID.<br/>
+   * Note: FIDO U2F authenticators do not support AAID nor AAGUID, but they use attestation certificates dedicated to a single authenticator model.<br/>
+   * 
+   * @param aaguid FIDO2 authenticator AAGUID
+   * @param refresh if true force to fetch Metadata BLOB, if false depends on update date or follows FM3RefreshOption
+   * @returns Metadata entry model class if not find return null
+   */
+  async findModelByAAGUID(aaguid: string, refresh?: boolean | FM3RefreshOption): Promise<MdsPayloadEntry | null> {
     const entry = await this.findByAAGUID(aaguid, refresh);
     if (entry) {
       return new MdsPayloadEntry(entry);
@@ -156,17 +206,17 @@ class Client {
   }
 
   /**
-   * Find FIDO UAF authenticator by AAID.
+   * Find FIDO UAF authenticator info by AAID.
    * 
    * Note: FIDO UAF authenticators support AAID, but they don’t support AAGUID.<br/>
    * Note: FIDO2 authenticators support AAGUID, but they don’t support AAID.<br/>
    * Note: FIDO U2F authenticators do not support AAID nor AAGUID, but they use attestation certificates dedicated to a single authenticator model.<br/>
    * 
    * @param aaid FIDO UAF authenticator AAID
-   * @param refresh if true force to fetch Metadata BLOB, if false depends on update date.
+   * @param refresh if true force to fetch Metadata BLOB, if false depends on update date or follows FM3RefreshOption
    * @returns Metadata entry if not find return null
    */
-  async findByAAID(aaid: string, refresh?: boolean | FM3FindOption): Promise<FM3MetadataBLOBPayloadEntry | null> {
+  async findByAAID(aaid: string, refresh?: boolean | FM3RefreshOption): Promise<FM3MetadataBLOBPayloadEntry | null> {
 
     if (!aaid) {
       throw new FM3InvalidParameterError('"aaid" is empty.');
@@ -191,7 +241,18 @@ class Client {
     return null;
   }
 
-  async findModelByAAID(aaid: string, refresh?: boolean | FM3FindOption): Promise<MdsPayloadEntry | null> {
+  /**
+   * Find FIDO UAF authenticator info by AAID and return in model class.
+   * 
+   * Note: FIDO UAF authenticators support AAID, but they don’t support AAGUID.<br/>
+   * Note: FIDO2 authenticators support AAGUID, but they don’t support AAID.<br/>
+   * Note: FIDO U2F authenticators do not support AAID nor AAGUID, but they use attestation certificates dedicated to a single authenticator model.<br/>
+   * 
+   * @param aaid FIDO UAF authenticator AAID
+   * @param refresh if true force to fetch Metadata BLOB, if false depends on update date or follows FM3RefreshOption
+   * @returns Metadata entry model class if not find return null
+   */
+  async findModelByAAID(aaid: string, refresh?: boolean | FM3RefreshOption): Promise<MdsPayloadEntry | null> {
     const entry = await this.findByAAID(aaid, refresh);
     if (entry) {
       return new MdsPayloadEntry(entry);
@@ -201,17 +262,17 @@ class Client {
   }
 
   /**
-   * Find FIDO U2F authenticator by AttestationCertificateKeyIdentifier.
+   * Find FIDO U2F authenticator info by AttestationCertificateKeyIdentifier.
    * 
    * Note: FIDO UAF authenticators support AAID, but they don’t support AAGUID.<br/>
    * Note: FIDO2 authenticators support AAGUID, but they don’t support AAID.<br/>
    * Note: FIDO U2F authenticators do not support AAID nor AAGUID, but they use attestation certificates dedicated to a single authenticator model.<br/>
    * 
    * @param attestationCertificateKeyIdentifier FIDO U2F authenticator AttestationCertificateKeyIdentifier
-   * @param refresh if true force to fetch Metadata BLOB, if false depends on update date
+   * @param refresh if true force to fetch Metadata BLOB, if false depends on update date or follows FM3RefreshOption
    * @returns Metadata entry if not find return null
    */
-  async findByAttestationCertificateKeyIdentifier(attestationCertificateKeyIdentifier: string, refresh?: boolean | FM3FindOption): Promise<FM3MetadataBLOBPayloadEntry | null> {
+  async findByAttestationCertificateKeyIdentifier(attestationCertificateKeyIdentifier: string, refresh?: boolean | FM3RefreshOption): Promise<FM3MetadataBLOBPayloadEntry | null> {
 
     if (!attestationCertificateKeyIdentifier) {
       throw new FM3InvalidParameterError('"attestationCertificateKeyIdentifiers" is empty.');
@@ -240,7 +301,18 @@ class Client {
     return null;
   }
 
-  async findModelByAttestationCertificateKeyIdentifier(attestationCertificateKeyIdentifier: string, refresh?: boolean | FM3FindOption): Promise<MdsPayloadEntry | null> {
+  /**
+   * Find FIDO U2F authenticator info by AttestationCertificateKeyIdentifier and return in model class .
+   * 
+   * Note: FIDO UAF authenticators support AAID, but they don’t support AAGUID.<br/>
+   * Note: FIDO2 authenticators support AAGUID, but they don’t support AAID.<br/>
+   * Note: FIDO U2F authenticators do not support AAID nor AAGUID, but they use attestation certificates dedicated to a single authenticator model.<br/>
+   * 
+   * @param attestationCertificateKeyIdentifier FIDO U2F authenticator AttestationCertificateKeyIdentifier
+   * @param refresh if true force to fetch Metadata BLOB, if false depends on update date or follows FM3RefreshOption
+   * @returns Metadata entry model class if not find return null
+   */
+  async findModelByAttestationCertificateKeyIdentifier(attestationCertificateKeyIdentifier: string, refresh?: boolean | FM3RefreshOption): Promise<MdsPayloadEntry | null> {
     const entry = await this.findByAttestationCertificateKeyIdentifier(attestationCertificateKeyIdentifier, refresh);
     if (entry) {
       return new MdsPayloadEntry(entry);
@@ -251,17 +323,17 @@ class Client {
 
   
   /**
-   * Find FIDO(FIDO2, FIDO UAF and FIDO U2F) authenticator.
+   * Find FIDO(FIDO2, FIDO UAF and FIDO U2F) authenticator info.
    * 
    * @param identifier AAGUID, AAID or AttestationCertificateKeyIdentifier
-   * @param refresh if true force to fetch Metadata BLOB, if false depends on update date
+   * @param refresh if true force to fetch Metadata BLOB, if false depends on update date or follows FM3RefreshOption
    * @returns Metadata entry if not find return null
    */
-  async findMetadata(identifier: string, refresh?: boolean | FM3FindOption): Promise<FM3MetadataBLOBPayloadEntry | null> {
+  async findMetadata(identifier: string, refresh?: boolean | FM3RefreshOption): Promise<FM3MetadataBLOBPayloadEntry | null> {
     const findFunctions = [this.findByAAGUID, this.findByAAID, this.findByAttestationCertificateKeyIdentifier];
     let isAlreadyRefresh = false;
     for (let func of findFunctions) {
-      let option: FM3FindOption;
+      let option: FM3RefreshOption;
       switch (refresh) {
         case 'error':
           option = 'error';
@@ -286,7 +358,14 @@ class Client {
     return null;
   }
 
-  async findMetadataModel(identifier: string, refresh?: boolean | FM3FindOption): Promise<MdsPayloadEntry | null> {
+  /**
+   * Find FIDO(FIDO2, FIDO UAF and FIDO U2F) authenticator info and return in model class .
+   * 
+   * @param identifier AAGUID, AAID or AttestationCertificateKeyIdentifier
+   * @param refresh if true force to fetch Metadata BLOB, if false depends on update date or follows FM3RefreshOption
+   * @returns Metadata entry model class if not find return null
+   */
+  async findMetadataModel(identifier: string, refresh?: boolean | FM3RefreshOption): Promise<MdsPayloadEntry | null> {
     const entry = await this.findMetadata(identifier, refresh);
     if (entry) {
       return new MdsPayloadEntry(entry);
