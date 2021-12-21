@@ -1,0 +1,39 @@
+name: Update Metadata statement
+on: 
+  schedule:
+    # 0:00(GMT) on the second day of every month
+    - cron: '0 0 2 * *'
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v2
+    - name: Setup
+      uses: actions/setup-node@v1
+      with:
+        node-version: '14'
+        registry-url: 'https://registry.npmjs.org'
+    - name: Install
+      run: | 
+        npm install
+    - name: Build
+      run: |
+        npm run build
+    - name: Update
+      run: |
+        node ./.github/workflows/update.js
+    - name: Commit
+      run: |
+        git config --global user.email "s1r.aria.azureglo@gmail.com"
+        git config --global user.name "s1r-J"
+        git config --global pull.ff only
+        git add .
+        git commit -m "Update $(date +'%Y-%m-%d')"
+        git pull origin main
+        git push origin main
+    - name: Publish
+      run: npm publish
+      env:
+        NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

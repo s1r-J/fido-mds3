@@ -1,15 +1,20 @@
-import fs from 'fs';
-import path from 'path';
-import axios from 'axios';
-import base64url from 'base64url';
-import rs from 'jsrsasign';
-import moment from 'moment';
-import {
-  pki,
-} from 'node-forge';
-import {
-  parse,
-} from 'comment-json';
+/**
+ * How to access metadata service data.
+ * 
+ * url: download from metadata service's endpoint URL
+ * file: read from metadata service jwt file's path
+ * jwt: use jwt string in args
+ */
+type AccessMds = 'url' | 'file' | 'jwt';
+
+/**
+ * How to access metadata service's root certificate.
+ * 
+ * url: download from root certificate's endpoint URL.
+ * file: read from root certificate DER file's path.
+ * pem: use pem string in args.
+ */
+type AccessRootCertificate = 'url' | 'file' | 'pem';
 
 /**
  * This module's config.
@@ -17,14 +22,27 @@ import {
 interface FidoMds3Config {
   mdsUrl: URL;
   mdsFile: string;
+  mdsJwt?: string;
   payloadFile: string;
   rootUrl: URL;
   rootFile: string;
+  rootPem?: string;
+
+  accessMds: AccessMds;
+  accessRootCertificate: AccessRootCertificate;
 }
 
 /**
- * The metadataStatement JSON object.
+ * Specify behavior refreshing metadata payload when finding authenticator info.
  * 
+ * needed: if metadata payload is old, refresh data.
+ * force: always refresh data.
+ * error: if metadata payload is old, throw error.
+ */
+type FM3RefreshOption = 'needed' | 'force' | 'error';
+
+/**
+ * The metadataStatement JSON object.
  * @see https://fidoalliance.org/specs/mds/fido-metadata-statement-v3.0-ps-20210518.html#metadata-keys
  */
 interface FM3MetadataStatement {
@@ -528,7 +546,7 @@ interface FM3BiometricStatusReport {
    * ISO-8601 formatted date since when the certLevel achieved, if applicable.
    * @see https://fidoalliance.org/specs/mds/fido-metadata-service-v3.0-ps-20210518.html#dom-biometricstatusreport-effectivedate
    */
-  effectiveData?: string;
+  effectiveDate?: string;
 
   /**
    * Describes the externally visible aspects of the Biometric Certification evaluation.
@@ -596,7 +614,7 @@ interface FM3StatusReport {
    * ISO-8601 formatted date since when the status code was set, if applicable. If no date is given, the status is assumed to be effective while present.
    * @see https://fidoalliance.org/specs/mds/fido-metadata-service-v3.0-ps-20210518.html#dom-statusreport-effectivedate
    */
-  effectiveData?: string;
+  effectiveDate?: string;
 
   /**
    * The authenticatorVersion that this status report relates to.
@@ -730,335 +748,12 @@ interface FM3MetadataBLOBPayloadEntry {
   rogueListHash: string;
 }
 
-class FM3BaseError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = 'FM3BaseError';
-  }
-}
-
-/**
- * Parameter is invalid.
- */
-class FM3InvalidParameterError extends FM3BaseError {
-  constructor(message: string) {
-    super(message);
-    this.name = 'FM3InvalidParameterError';
-  }
-}
-
-/**
- * Setting(default configure, file download, file save or certification validation) is invalid.
- */
-class FM3SettingError extends FM3BaseError {
-  constructor(message: string) {
-    super(message);
-    this.name = 'FM3SettingError';
-  }
-}
-
-class Client {
-
-  private config: FidoMds3Config;
-  legalHeader? : string;
-  updatedAt?: Date;
-  no?: number;
-  nextUpdateAt?: Date;
-  entries?: FM3MetadataBLOBPayloadEntry[];
-
-  constructor(config: FidoMds3Config) {
-    this.config = config;
-    this.load();
-  }
-
-  async refresh() {
-    const mdsFileResponse = await axios.get(this.config.mdsUrl.toString());
-    fs.writeFileSync(this.config.mdsFile, mdsFileResponse.data, 'utf-8');
-
-    this.verifyCertification(mdsFileResponse.data);
-
-    this.parse(mdsFileResponse.data);
-  }
-
-  private async verifyCertification(blobJwt: string) {
-    const [header, payload, signature] = blobJwt.split('.');
-    if (!header || !payload || !signature) {
-      throw new FM3SettingError('Blob file does not have three dot.');
-    }
-
-    const headerJSON = JSON.parse(base64url.decode(header));
-    const x5cArray = headerJSON['x5c'];
-    const certKeysPki = []
-    const certKeys = [];
-    for (const x5c of x5cArray) {
-      const certKeyString = ['-----BEGIN CERTIFICATE-----', x5c, "-----END CERTIFICATE-----"].join('\n');
-      certKeysPki.push(pki.certificateFromPem(certKeyString));
-      const certKey = rs.X509.getPublicKeyFromCertPEM(certKeyString);
-      const certKeyPem = rs.KEYUTIL.getPEM(certKey);
-      certKeys.push(certKeyPem);
-    }
-
-    const alg = headerJSON['alg'];
-    const isValid = rs.KJUR.jws.JWS.verifyJWT(blobJwt, certKeys[0], {alg: [alg]});
-    if (!isValid) {
-      throw new FM3SettingError('JWS cannot be verified.');
-    }
-
-    // verify certificate chain
-    // [ssl - Using node.js to verify a X509 certificate with CA cert - Stack Overflow](https://stackoverflow.com/questions/48377731/using-node-js-to-verify-a-x509-certificate-with-ca-cert)
-    const rootCrtResponse = await axios.get(this.config.rootUrl.toString());
-    fs.writeFileSync(this.config.rootFile, rootCrtResponse.data, 'utf-8');
-    const cert = pki.certificateFromPem(rootCrtResponse.data);
-    const caStore = pki.createCaStore([ ...certKeysPki, cert ]);
-    const result = pki.verifyCertificateChain(caStore, [ cert ]);
-    if (!result) {
-      throw new FM3SettingError('Certificate chain cannot be verified.');
-    }
-  }
-
-  private async parse(blobJwt: string) {
-    const [, payload,] = blobJwt.split('.');
-    const payloadString = base64url.decode(payload);
-    const payloadJSON = JSON.parse(payloadString);
-    fs.writeFileSync(this.config.payloadFile, payloadString, 'utf-8');
-
-    this.format(payloadJSON);
-    
-    this.updatedAt = moment().toDate();
-  }
-
-  private format(payloadJSON: any) {
-    this.legalHeader = payloadJSON['legalHeader'];
-    this.no = payloadJSON['no'];
-    this.nextUpdateAt = moment.utc(payloadJSON['nextUpdate'], 'YYYY-MM-DD').toDate();
-    const entriesJSONArray = payloadJSON['entries'];
-
-    this.entries = [];
-    for (let ent of entriesJSONArray) {
-      this.entries.push(ent as FM3MetadataBLOBPayloadEntry); // XXX danger
-    }
-  }
-
-  private async load() {
-    const payloadJSON = JSON.parse(fs.readFileSync(this.config.payloadFile, 'utf-8'));
-    this.format(payloadJSON);
-  }
-
-  /**
-   * Find FIDO2 authenticator by AAGUID.
-   * 
-   * Note: FIDO UAF authenticators support AAID, but they don’t support AAGUID.<br/>
-   * Note: FIDO2 authenticators support AAGUID, but they don’t support AAID.<br/>
-   * Note: FIDO U2F authenticators do not support AAID nor AAGUID, but they use attestation certificates dedicated to a single authenticator model.<br/>
-   * 
-   * @param aaguid FIDO2 authenticator AAGUID
-   * @param refresh if true force to fetch Metadata BLOB, if false depends on update date
-   * @returns Metadata entry if not find return null
-   */
-  async findByAAGUID(aaguid: string, refresh?: boolean): Promise<FM3MetadataBLOBPayloadEntry | null> {
-
-    if (!aaguid) {
-      throw new FM3InvalidParameterError('"aaguid" is empty.');
-    }
-
-    if (refresh || !this.entries || (this.nextUpdateAt && moment(this.nextUpdateAt).isBefore(moment()))) {
-      await this.refresh();
-    }
-    if (!this.entries) {
-      throw new FM3SettingError('Metadata cannot be fetched.');
-    }
-
-    for (let ent of this.entries) {
-      if (ent.aaguid === aaguid) {
-        return ent;
-      } else {
-        let ms = ent.metadataStatement;
-        if (ms && ms.aaguid === aaguid) {
-          return ent;
-        }
-      }
-    }
-
-    return null;
-  }
-
-  /**
-   * Find FIDO UAF authenticator by AAID.
-   * 
-   * Note: FIDO UAF authenticators support AAID, but they don’t support AAGUID.<br/>
-   * Note: FIDO2 authenticators support AAGUID, but they don’t support AAID.<br/>
-   * Note: FIDO U2F authenticators do not support AAID nor AAGUID, but they use attestation certificates dedicated to a single authenticator model.<br/>
-   * 
-   * @param aaid FIDO UAF authenticator AAID
-   * @param refresh if true force to fetch Metadata BLOB, if false depends on update date.
-   * @returns Metadata entry if not find return null
-   */
-  async findByAAID(aaid: string, refresh?: boolean): Promise<FM3MetadataBLOBPayloadEntry | null> {
-
-    if (!aaid) {
-      throw new FM3InvalidParameterError('"aaid" is empty.');
-    }
-
-    if (refresh || !this.entries || (this.nextUpdateAt && moment(this.nextUpdateAt).isBefore(moment()))) {
-      await this.refresh();
-    }
-    if (!this.entries) {
-      throw new FM3SettingError('Metadata cannot be fetched.');
-    }
-
-    for (let ent of this.entries) {
-      if (ent.aaid === aaid) {
-        return ent;
-      } else {
-        let ms = ent.metadataStatement;
-        if (ms && ms.aaid === aaid) {
-          return ent;
-        }
-      }
-    }
-
-    return null;
-  }
-
-  /**
-   * Find FIDO U2F authenticator by AttestationCertificateKeyIdentifier.
-   * 
-   * Note: FIDO UAF authenticators support AAID, but they don’t support AAGUID.<br/>
-   * Note: FIDO2 authenticators support AAGUID, but they don’t support AAID.<br/>
-   * Note: FIDO U2F authenticators do not support AAID nor AAGUID, but they use attestation certificates dedicated to a single authenticator model.<br/>
-   * 
-   * @param attestationCertificateKeyIdentifier FIDO U2F authenticator AttestationCertificateKeyIdentifier
-   * @param refresh if true force to fetch Metadata BLOB, if false depends on update date
-   * @returns Metadata entry if not find return null
-   */
-  async findByAttestationCertificateKeyIdentifier(attestationCertificateKeyIdentifier: string, refresh?: boolean): Promise<FM3MetadataBLOBPayloadEntry | null> {
-
-    if (!attestationCertificateKeyIdentifier) {
-      throw new FM3InvalidParameterError('"attestationCertificateKeyIdentifiers" is empty.');
-    }
-
-    if (refresh || !this.entries || (this.nextUpdateAt && moment(this.nextUpdateAt).isBefore(moment()))) {
-      await this.refresh();
-    }
-    if (!this.entries) {
-      throw new FM3SettingError('Metadata cannot be fetched.');
-    }
-
-    for (let ent of this.entries) {
-      if (!ent.attestationCertificateKeyIdentifiers) {
-        continue;
-      }
-
-      if (ent.attestationCertificateKeyIdentifiers.some(aki => aki === attestationCertificateKeyIdentifier)) {
-        return ent;
-      } else {
-        let ms = ent.metadataStatement;
-        if (ms && ms.attestationCertificateKeyIdentifiers && ms.attestationCertificateKeyIdentifiers.some(aki => aki === attestationCertificateKeyIdentifier)) {
-          return ent;
-        }
-      }
-    }
-
-    return null;
-  }
-
-  /**
-   * Find FIDO(FIDO2, FIDO UAF and FIDO U2F) authenticator.
-   * 
-   * @param identifier AAGUID, AAID or AttestationCertificateKeyIdentifier
-   * @param refresh if true force to fetch Metadata BLOB, if false depends on update date
-   * @returns Metadata entry if not find return null
-   */
-  async findMetadata(identifier: string, refresh?: boolean): Promise<FM3MetadataBLOBPayloadEntry | null> {
-
-    const findFunctions = [this.findByAAGUID, this.findByAAID, this.findByAttestationCertificateKeyIdentifier];
-    let isAlreadyRefresh = false;
-    for (let func of findFunctions) {
-      let ent = await func.call(this, identifier, refresh && !isAlreadyRefresh);
-      if (ent) {
-        return ent;
-      }
-
-      isAlreadyRefresh = true;
-    }
-
-    return null;
-  }
-
-}
-
-class Builder {
-
-  private config: FidoMds3Config;
-
-  constructor(config?: Partial<FidoMds3Config>) {
-    const configJson = fs.readFileSync(path.resolve(__dirname, '../config/config.json'), 'utf-8');
-    const defaultConfig = parse(configJson);
-
-    this.config = {
-      mdsUrl:  (config && config.mdsUrl) || new URL(defaultConfig.mds.url),
-      mdsFile: (config && config.mdsFile) || path.resolve(__dirname, defaultConfig.mds.file),
-      payloadFile: (config && config.payloadFile) || path.resolve(__dirname, defaultConfig.payload.file),
-      rootUrl: (config && config.rootUrl) || new URL(defaultConfig.root.url),
-      rootFile: (config && config.rootFile) || path.resolve(__dirname, defaultConfig.root.file),
-    };
-  }
-
-  mdsUrl(mdsUrl: URL): Builder {
-    if (!mdsUrl) {
-      throw new FM3InvalidParameterError('"mdsUrl" is empty.');
-    }
-    this.config.mdsUrl = mdsUrl;
-
-    return this;
-  }
-
-  mdsFile(mdsFile: string): Builder {
-    if (!mdsFile) {
-      throw new FM3InvalidParameterError('"mdsFile" is empty.');
-    }
-    this.config.mdsFile = mdsFile;
-
-    return this;
-  }
-
-  payloadFile(payloadFile: string): Builder {
-    if (!payloadFile) {
-      throw new FM3InvalidParameterError('"payloadFile" is empty.');
-    }
-    this.config.payloadFile = payloadFile;
-
-    return this;
-  }
-
-  rootUrl(rootUrl: URL): Builder {
-    if (!rootUrl) {
-      throw new FM3InvalidParameterError('"rootUrl" is empty.');
-    }
-    this.config.rootUrl = rootUrl;
-
-    return this;
-  }
-
-  rootFile(rootFile: string): Builder {
-    if (!rootFile) {
-      throw new FM3InvalidParameterError('"rootFile" is empty.');
-    }
-    this.config.rootFile = rootFile;
-
-    return this;
-  }
-
-  build(): Client {
-    return new Client(this.config);
-  }
-}
-
-const FidoMds3 = {
-  Builder,
-  Client,
-  FM3InvalidParameterError,
-  FM3SettingError,
+export {
+  FidoMds3Config,
+  FM3RefreshOption,
+  FM3MetadataStatement,
+  FM3BiometricStatusReport,
+  FM3AuthenticatorStatus,
+  FM3StatusReport,
+  FM3MetadataBLOBPayloadEntry,
 };
-
-export default FidoMds3;
