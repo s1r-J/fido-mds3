@@ -13,7 +13,7 @@ import {
 import FM3AccessError from './errors/accessError';
 
 /**
- * Access to metadata service class.
+ * Accessor class executes accessing to metadata service.
  * 
  */
 class Accessor {
