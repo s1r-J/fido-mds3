@@ -11,7 +11,7 @@ import FM3InvalidParameterError from './errors/invalidParameterError';
 import Client from './client';
 
 /**
- * Builder class builds client class which finds authenticator's information, following config.
+ * Builder class builds Client class which finds authenticator's information, following config.
  */
 class Builder {
 
