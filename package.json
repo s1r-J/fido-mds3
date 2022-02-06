@@ -42,14 +42,12 @@
     "dayjs": "^1.10.7",
     "jsrsasign": "^10.5.1",
     "jsrsasign-util": "^1.0.5",
-    "node-forge": "^0.10.0",
     "str2ab": "^1.0.2"
   },
   "devDependencies": {
     "@types/comment-json": "^2.4.2",
     "@types/jsrsasign": "^9.0.3",
     "@types/node": "^16.11.7",
-    "@types/node-forge": "^0.10.9",
     "@types/tap": "^15.0.5",
     "tap": "^15.1.5",
     "ts-node": "^10.4.0",
