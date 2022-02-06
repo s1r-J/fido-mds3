@@ -7,9 +7,6 @@ import {
 } from 'comment-json';
 import dayjs from 'dayjs';
 import rs from 'jsrsasign';
-import {
-  pki,
-} from 'node-forge';
 import FM3AccessError from './errors/accessError';
 
 /**
@@ -18,7 +15,8 @@ import FM3AccessError from './errors/accessError';
  */
 class Accessor {
   private static payloadData?: string;
-  private static rootCert?: pki.Certificate;
+  private static rootCert?: rs.X509;
+  private static alg?: string;
 
   private constructor() {
   }
@@ -52,7 +50,9 @@ class Accessor {
    * @param pem PEM format certificate
    */
   static setRootCertPem(pem: string): void {
-    Accessor.rootCert = pki.certificateFromPem(pem);
+    const certificate = new rs.X509();
+    certificate.readCertPEM(pem);
+    Accessor.rootCert = certificate;
   }
 
   /**
@@ -64,7 +64,9 @@ class Accessor {
     const buf = fs.readFileSync(filePath);
     const bstr = buf.toString('base64');
     const pem = ['-----BEGIN CERTIFICATE-----', bstr, '-----END CERTIFICATE-----'].join('\n');
-    Accessor.rootCert = pki.certificateFromPem(pem);
+    const certificate = new rs.X509();
+    certificate.readCertPEM(pem);
+    Accessor.rootCert = certificate;
   }
 
   /**
@@ -77,7 +79,9 @@ class Accessor {
       const buf = await Accessor._requestRootCertificate(url);
       const bstr = buf.toString('base64');
       const pem = ['-----BEGIN CERTIFICATE-----', bstr, '-----END CERTIFICATE-----'].join('\n');
-      Accessor.rootCert = pki.certificateFromPem(pem);
+      const certificate = new rs.X509();
+      certificate.readCertPEM(pem);
+      Accessor.rootCert = certificate;
     } catch (err) {
       if (axios.isAxiosError(err) && err.response) {
         throw new FM3AccessError(`Request has error. Status code: ${err.response.status}`);
@@ -99,27 +103,36 @@ class Accessor {
     }
 
     const headerJSON = JSON.parse(base64url.decode(header));
-    const x5cArray = headerJSON['x5c'];
-    const pkiCerts = []
-    const certKeys = [];
-    for (const x5c of x5cArray) {
+
+    const certPEMs = [];
+    const rsCerts = [];
+    let crlSNs: string[] = [];
+    for (const x5c of headerJSON['x5c']) {
       const certPemString = ['-----BEGIN CERTIFICATE-----', x5c, '-----END CERTIFICATE-----'].join('\n');
-      // collect certificate
-      pkiCerts.push(pki.certificateFromPem(certPemString));
+      certPEMs.push(certPemString);
 
-      // collect public key
-      const publicKey = rs.X509.getPublicKeyFromCertPEM(certPemString);
-      certKeys.push(rs.KEYUTIL.getPEM(publicKey));
+      const rsCertificate = new rs.X509();
+      rsCertificate.readCertPEM(certPemString);
+      rsCerts.push(rsCertificate);
+      
+      const crlUris = rsCertificate.getExtCRLDistributionPointsURI() || [];
+      const snInArray = await Promise.all(crlUris.map(async (uri) => {
+        const res = await axios.get(uri, { responseType: 'arraybuffer' });
+        const crlPEM = ['-----BEGIN X509 CRL-----', Buffer.from(res.data).toString('base64'), '-----END X509 CRL-----'].join('\n');
+        const crl = new rs.X509CRL(crlPEM);
+        const revSNs = crl.getRevCertArray().map((revCert) => {
+          return revCert.sn.hex;
+        }) || [];
+
+        return revSNs;
+      })) || [[]];
+
+      crlSNs = [
+        ...crlSNs,
+        ...snInArray.flat(),
+      ];
     }
 
-    // verify signature
-    const alg = headerJSON['alg'];
-    const isValid = rs.KJUR.jws.JWS.verifyJWT(blobJwt, certKeys[0], {alg: [alg]});
-    if (!isValid) {
-      throw new FM3AccessError('JWS cannot be verified.');
-    }
-
-    // verify certificate chain
     let rootCert = Accessor.rootCert;
     if (!rootCert) {
       // root certificate is not set
@@ -129,27 +142,64 @@ class Accessor {
         // use file in this module
         const bstr = fs.readFileSync(path.resolve(__dirname, defaultConfig.root.file)).toString('base64');
         const pem = ['-----BEGIN CERTIFICATE-----', bstr, '-----END CERTIFICATE-----'].join('\n');
-        const cert = pki.certificateFromPem(pem);
-        if (dayjs().isAfter(cert.validity.notBefore) && dayjs().isBefore(cert.validity.notAfter)) {
+        const cert = new rs.X509();
+        cert.readCertPEM(pem);
+        if (dayjs().isAfter(dayjs(rs.zulutomsec(cert.getNotBefore()))) && dayjs().isBefore(dayjs(rs.zulutomsec(cert.getNotAfter())))) {
           rootCert = cert;
         } else {
-          throw new Error('Root certificate file int this module is not valid.');
+          throw new Error('Root certificate file in this module is not valid.');
         }
       } catch (err) {
         // use certificate in the internet
         const buf = await Accessor._requestRootCertificate(new URL(defaultConfig.root.url));
         const bstr = buf.toString('base64');
         const pem = ['-----BEGIN CERTIFICATE-----', bstr, '-----END CERTIFICATE-----'].join('\n');
-        rootCert = pki.certificateFromPem(pem);
+        const cert = new rs.X509();;
+        cert.readCertPEM(pem);
+        rootCert = cert;
         fs.writeFileSync(defaultConfig.root.file, buf);
       }
     }
+    rsCerts.push(rootCert);
+    certPEMs.push(['-----BEGIN CERTIFICATE-----', Buffer.from(rootCert.hex, 'hex').toString('base64'), '-----END CERTIFICATE-----'].join('\n'))
 
-    const caStore = pki.createCaStore([ ...pkiCerts, rootCert ]);
-    const result = pki.verifyCertificateChain(caStore, [ rootCert ]);  
-    if (!result) {
+    const hasRevokedCert = rsCerts.some((c) => {
+      const sn = c.getSerialNumberHex();
+      return crlSNs.includes(sn);
+    });
+    if (hasRevokedCert) {
+      throw new FM3AccessError('Revoked certificate is included.');
+    }
+
+    let isValidChain = true;
+    for (let i = 0; i < rsCerts.length - 1; i++) {
+      const cert = rsCerts[i];
+      const certStruct = rs.ASN1HEX.getTLVbyList(cert.hex, 0, [0]);
+      if (certStruct == null) {
+        isValidChain = false;
+        break;
+      }
+      const algorithm = cert.getSignatureAlgorithmField();
+      const signatureHex = cert.getSignatureValueHex()
+
+      // 上位の証明書に対して検証をおこなう
+      const signature = new rs.KJUR.crypto.Signature({alg: algorithm});
+      const upperCertPEM = certPEMs[i + 1];
+      signature.init(upperCertPEM);
+      signature.updateHex(certStruct);
+      isValidChain = isValidChain && signature.verify(signatureHex); // チェーン全ての証明書が正当かを確認
+    }
+    if (!isValidChain) {
       throw new FM3AccessError('Certificate chain cannot be verified.');
     }
+
+    // verify signature
+    const alg = headerJSON['alg'];
+    const isValid = rs.KJUR.jws.JWS.verifyJWT(blobJwt, certPEMs[0], {alg: [alg]});
+    if (!isValid) {
+      throw new FM3AccessError('JWS cannot be verified.');
+    }
+    Accessor.alg = alg;
 
     // decode payload
     const payloadString = base64url.decode(payload);
