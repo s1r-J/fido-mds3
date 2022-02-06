@@ -42,7 +42,11 @@ test('# setRootCertPem', function(t) {
       Accessor.setRootCertPem(PEM);
       t.end();
     } catch (err) {
-      t.fail();
+      let message = `${t.name}: error`;
+      if (err != null && err instanceof Error) {
+        message = err.message;
+      }
+      t.fail(message);
     }
   }); 
 
@@ -62,7 +66,11 @@ test('# setRootCertFile', function(t) {
         t.end();
       }
     } catch (err) {
-      t.fail();
+      let message = `${t.name}: error`;
+      if (err != null && err instanceof Error) {
+        message = err.message;
+      }
+      t.fail(message);
     }
   }); 
 
@@ -75,7 +83,11 @@ test('# setRootCertUrl', function(t) {
       await Accessor.setRootCertUrl(new URL(DOWNLOAD_URL));
       t.end();
     } catch (err) {
-      t.fail();
+      let message = `${t.name}: error`;
+      if (err != null && err instanceof Error) {
+        message = err.message;
+      }
+      t.fail(message);
     }
   }); 
 
@@ -91,10 +103,14 @@ test('# fromJwt', function(t) {
         await Accessor.fromJwt(res.data);
         t.end();
       } else {
-        t.fail();
+        t.fail('Response is not valid form: ' + BLOB_JWT_URL);
       }
     } catch(err) {
-      t.fail();
+      let message = `${t.name}: error`;
+      if (err != null && err instanceof Error) {
+        message = err.message;
+      }
+      t.fail(message);
     }
   });
 
@@ -124,7 +140,11 @@ test('# fromJwt', function(t) {
       Accessor.fromJwt(res.data);
       t.end();
     } catch(err) {
-      t.fail();
+      let message = `${t.name}: error`;
+      if (err != null && err instanceof Error) {
+        message = err.message;
+      }
+      t.fail(message);
     }
   });
 
@@ -139,7 +159,11 @@ test('# fromFile', function(t) {
       await Accessor.fromFile('./accessor-test-mds-blob.jwt');
       t.end();
     } catch (err) {
-      t.fail()
+      let message = `${t.name}: error`;
+      if (err != null && err instanceof Error) {
+        message = err.message;
+      }
+      t.fail(message);
     }
     fs.unlinkSync('./accessor-test-mds-blob.jwt');
   });
@@ -153,7 +177,11 @@ test('# fromUrl', function(t) {
       await Accessor.fromUrl(new URL(BLOB_JWT_URL));
       t.end();
     } catch (err) {
-      t.fail()
+      let message = `${t.name}: error`;
+      if (err != null && err instanceof Error) {
+        message = err.message;
+      }
+      t.fail(message);
     }
   });
 
@@ -171,7 +199,11 @@ test('# toJsonObject', function(t) {
       t.ok(result.entries);
       t.end();
     } catch(err) {
-      t.fail();
+      let message = `${t.name}: error`;
+      if (err != null && err instanceof Error) {
+        message = err.message;
+      }
+      t.fail(message);
     }
   });
 
@@ -188,7 +220,11 @@ test('# toFile', function(t) {
       t.ok(json);
       t.end();
     } catch(err) {
-      t.fail();
+      let message = `${t.name}: error`;
+      if (err != null && err instanceof Error) {
+        message = err.message;
+      }
+      t.fail(message);
     }
     fs.unlinkSync('./test-payload.json');
   });
