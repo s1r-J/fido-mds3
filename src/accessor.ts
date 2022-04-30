@@ -117,8 +117,14 @@ class Accessor {
       
       const crlUris = rsCertificate.getExtCRLDistributionPointsURI() || [];
       const snInArray = await Promise.all(crlUris.map(async (uri) => {
-        const res = await axios.get(uri, { responseType: 'arraybuffer' });
-        const crlPEM = ['-----BEGIN X509 CRL-----', Buffer.from(res.data).toString('base64'), '-----END X509 CRL-----'].join('\n');
+        let res = await axios.get(uri);
+        let crlPEM;
+        if (res.data.startsWith('-----BEGIN')) {
+          crlPEM = res.data;
+        } else {
+          res = await axios.get(uri, { responseType: 'arraybuffer' });
+          crlPEM = ['-----BEGIN X509 CRL-----', Buffer.from(res.data).toString('base64'), '-----END X509 CRL-----'].join('\n');
+        }
         const crl = new rs.X509CRL(crlPEM);
         const revSNs = crl.getRevCertArray().map((revCert) => {
           return revCert.sn.hex;
@@ -182,12 +188,11 @@ class Accessor {
       const algorithm = cert.getSignatureAlgorithmField();
       const signatureHex = cert.getSignatureValueHex()
 
-      // 上位の証明書に対して検証をおこなう
       const signature = new rs.KJUR.crypto.Signature({alg: algorithm});
       const upperCertPEM = certPEMs[i + 1];
       signature.init(upperCertPEM);
       signature.updateHex(certStruct);
-      isValidChain = isValidChain && signature.verify(signatureHex); // チェーン全ての証明書が正当かを確認
+      isValidChain = isValidChain && signature.verify(signatureHex);
     }
     if (!isValidChain) {
       throw new FM3AccessError('Certificate chain cannot be verified.');
@@ -250,6 +255,10 @@ class Accessor {
     }
 
     fs.writeFileSync(filePath, Accessor.payloadData);
+  }
+
+  static getAlg(): string | undefined {
+    return Accessor.alg;
   }
 }
 

@@ -1,6 +1,6 @@
 {
   "name": "fido-mds3",
-  "version": "0.3.1-20220402",
+  "version": "0.3.2-20220402",
   "description": "Module to help access to FIDO Alliance Metadata Service v3.",
   "main": "index.js",
   "types": "./dist/index.d.ts",
@@ -41,8 +41,7 @@
     "comment-json": "^4.1.1",
     "dayjs": "^1.10.7",
     "jsrsasign": "^10.5.1",
-    "jsrsasign-util": "^1.0.5",
-    "str2ab": "^1.0.2"
+    "str2ab": "^1.1.0"
   },
   "devDependencies": {
     "@types/comment-json": "^2.4.2",
