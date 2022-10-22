@@ -21,6 +21,18 @@ class Accessor {
   private constructor() {
   }
 
+  private static createPem(content: string | Buffer, type: string): string {
+    let c;
+    if (typeof content === 'string') {
+      c = content;
+    } else {
+      c = content.toString('base64');
+    }
+    const pem = [`-----BEGIN ${type}-----`, c, `-----END ${type}-----`].join('\n');
+
+    return pem;
+  }
+
   /**
    * This method is expected to use in this class.
    * 
@@ -50,8 +62,7 @@ class Accessor {
    * @param pem PEM format certificate
    */
   static setRootCertPem(pem: string): void {
-    const certificate = new rs.X509();
-    certificate.readCertPEM(pem);
+    const certificate = new rs.X509(pem);
     Accessor.rootCert = certificate;
   }
 
@@ -62,10 +73,8 @@ class Accessor {
    */
   static async setRootCertFile(filePath: string): Promise<void> {
     const buf = fs.readFileSync(filePath);
-    const bstr = buf.toString('base64');
-    const pem = ['-----BEGIN CERTIFICATE-----', bstr, '-----END CERTIFICATE-----'].join('\n');
-    const certificate = new rs.X509();
-    certificate.readCertPEM(pem);
+    const pem =  Accessor.createPem(buf, 'CERTIFICATE');
+    const certificate = new rs.X509(pem);
     Accessor.rootCert = certificate;
   }
 
@@ -77,10 +86,8 @@ class Accessor {
   static async setRootCertUrl(url: URL): Promise<void> {
     try {
       const buf = await Accessor._requestRootCertificate(url);
-      const bstr = buf.toString('base64');
-      const pem = ['-----BEGIN CERTIFICATE-----', bstr, '-----END CERTIFICATE-----'].join('\n');
-      const certificate = new rs.X509();
-      certificate.readCertPEM(pem);
+      const pem = Accessor.createPem(buf, 'CERTIFICATE');
+      const certificate = new rs.X509(pem);
       Accessor.rootCert = certificate;
     } catch (err) {
       if (axios.isAxiosError(err) && err.response) {
@@ -108,11 +115,10 @@ class Accessor {
     const rsCerts = [];
     let crlSNs: string[] = [];
     for (const x5c of headerJSON['x5c']) {
-      const certPemString = ['-----BEGIN CERTIFICATE-----', x5c, '-----END CERTIFICATE-----'].join('\n');
+      const certPemString = Accessor.createPem(x5c, 'CERTIFICATE');
       certPEMs.push(certPemString);
 
-      const rsCertificate = new rs.X509();
-      rsCertificate.readCertPEM(certPemString);
+      const rsCertificate = new rs.X509(certPemString);
       rsCerts.push(rsCertificate);
       
       const crlUris = rsCertificate.getExtCRLDistributionPointsURI() || [];
@@ -123,7 +129,7 @@ class Accessor {
           crlPEM = res.data;
         } else {
           res = await axios.get(uri, { responseType: 'arraybuffer' });
-          crlPEM = ['-----BEGIN X509 CRL-----', Buffer.from(res.data).toString('base64'), '-----END X509 CRL-----'].join('\n');
+          crlPEM = Accessor.createPem(Buffer.from(res.data), 'X509 CRL');
         }
         const crl = new rs.X509CRL(crlPEM);
         const revSNs = crl.getRevCertArray().map((revCert) => {
@@ -146,10 +152,9 @@ class Accessor {
       const defaultConfig = parse(configJson);
       try {
         // use file in this module
-        const bstr = fs.readFileSync(path.resolve(__dirname, defaultConfig.root.file)).toString('base64');
-        const pem = ['-----BEGIN CERTIFICATE-----', bstr, '-----END CERTIFICATE-----'].join('\n');
-        const cert = new rs.X509();
-        cert.readCertPEM(pem);
+        const buf = fs.readFileSync(path.resolve(__dirname, defaultConfig.root.file));
+        const pem = Accessor.createPem(buf, 'CERTIFICATE');
+        const cert = new rs.X509(pem);
         if (dayjs().isAfter(dayjs(rs.zulutomsec(cert.getNotBefore()))) && dayjs().isBefore(dayjs(rs.zulutomsec(cert.getNotAfter())))) {
           rootCert = cert;
         } else {
@@ -158,16 +163,14 @@ class Accessor {
       } catch (err) {
         // use certificate in the internet
         const buf = await Accessor._requestRootCertificate(new URL(defaultConfig.root.url));
-        const bstr = buf.toString('base64');
-        const pem = ['-----BEGIN CERTIFICATE-----', bstr, '-----END CERTIFICATE-----'].join('\n');
-        const cert = new rs.X509();;
-        cert.readCertPEM(pem);
+        const pem = Accessor.createPem(buf, 'CERTIFICATE');
+        const cert = new rs.X509(pem);
         rootCert = cert;
         fs.writeFileSync(defaultConfig.root.file, buf);
       }
     }
     rsCerts.push(rootCert);
-    certPEMs.push(['-----BEGIN CERTIFICATE-----', Buffer.from(rootCert.hex, 'hex').toString('base64'), '-----END CERTIFICATE-----'].join('\n'))
+    certPEMs.push(Accessor.createPem(Buffer.from(rootCert.hex, 'hex'), 'CERTIFICATE'));
 
     const hasRevokedCert = rsCerts.some((c) => {
       const sn = c.getSerialNumberHex();
