@@ -42,12 +42,12 @@
     "axios": "^0.27.2",
     "comment-json": "^4.1.1",
     "dayjs": "^1.10.7",
-    "jsrsasign": "^10.5.1",
+    "jsrsasign": "^10.5.27",
     "str2ab": "^1.1.0"
   },
   "devDependencies": {
     "@types/comment-json": "^2.4.2",
-    "@types/jsrsasign": "^9.0.3",
+    "@types/jsrsasign": "^10.5.4",
     "@types/node": "^16.11.7",
     "@types/tap": "^15.0.5",
     "rimraf": "^3.0.2",

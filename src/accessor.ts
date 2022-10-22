@@ -50,8 +50,7 @@ class Accessor {
    * @param pem PEM format certificate
    */
   static setRootCertPem(pem: string): void {
-    const certificate = new rs.X509();
-    certificate.readCertPEM(pem);
+    const certificate = new rs.X509(pem);
     Accessor.rootCert = certificate;
   }
 
@@ -64,8 +63,7 @@ class Accessor {
     const buf = fs.readFileSync(filePath);
     const bstr = buf.toString('base64');
     const pem = ['-----BEGIN CERTIFICATE-----', bstr, '-----END CERTIFICATE-----'].join('\n');
-    const certificate = new rs.X509();
-    certificate.readCertPEM(pem);
+    const certificate = new rs.X509(pem);
     Accessor.rootCert = certificate;
   }
 
@@ -79,8 +77,7 @@ class Accessor {
       const buf = await Accessor._requestRootCertificate(url);
       const bstr = buf.toString('base64');
       const pem = ['-----BEGIN CERTIFICATE-----', bstr, '-----END CERTIFICATE-----'].join('\n');
-      const certificate = new rs.X509();
-      certificate.readCertPEM(pem);
+      const certificate = new rs.X509(pem);
       Accessor.rootCert = certificate;
     } catch (err) {
       if (axios.isAxiosError(err) && err.response) {
@@ -111,8 +108,7 @@ class Accessor {
       const certPemString = ['-----BEGIN CERTIFICATE-----', x5c, '-----END CERTIFICATE-----'].join('\n');
       certPEMs.push(certPemString);
 
-      const rsCertificate = new rs.X509();
-      rsCertificate.readCertPEM(certPemString);
+      const rsCertificate = new rs.X509(certPemString);
       rsCerts.push(rsCertificate);
       
       const crlUris = rsCertificate.getExtCRLDistributionPointsURI() || [];
@@ -148,8 +144,7 @@ class Accessor {
         // use file in this module
         const bstr = fs.readFileSync(path.resolve(__dirname, defaultConfig.root.file)).toString('base64');
         const pem = ['-----BEGIN CERTIFICATE-----', bstr, '-----END CERTIFICATE-----'].join('\n');
-        const cert = new rs.X509();
-        cert.readCertPEM(pem);
+        const cert = new rs.X509(pem);
         if (dayjs().isAfter(dayjs(rs.zulutomsec(cert.getNotBefore()))) && dayjs().isBefore(dayjs(rs.zulutomsec(cert.getNotAfter())))) {
           rootCert = cert;
         } else {
@@ -160,8 +155,7 @@ class Accessor {
         const buf = await Accessor._requestRootCertificate(new URL(defaultConfig.root.url));
         const bstr = buf.toString('base64');
         const pem = ['-----BEGIN CERTIFICATE-----', bstr, '-----END CERTIFICATE-----'].join('\n');
-        const cert = new rs.X509();;
-        cert.readCertPEM(pem);
+        const cert = new rs.X509(pem);
         rootCert = cert;
         fs.writeFileSync(defaultConfig.root.file, buf);
       }
