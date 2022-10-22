@@ -36,197 +36,196 @@ const CONFIG = parse(fs.readFileSync(path.resolve(__dirname, '../config/config.j
 const DOWNLOAD_URL = CONFIG.root.url;
 const BLOB_JWT_URL = CONFIG.mds.url;
 
-test('# setRootCertPem', function(t) {
-  t.test('## setRootCertPem', function(t) {
-    try {
-      Accessor.setRootCertPem(PEM);
-      t.end();
-    } catch (err) {
-      let message = `${t.name}: error`;
-      if (err != null && err instanceof Error) {
-        message = err.message;
+test('Accessor', function (t) {
+  let DOWNLOAD_DATA = new DataView(Buffer.from([]).buffer);
+  let BLOB_JWT_DATA = '';
+
+  t.before(async () => {
+    const downloadRes = await axios.get(DOWNLOAD_URL, { responseType : 'arraybuffer', });
+    DOWNLOAD_DATA = downloadRes.data;
+
+    const blobRes = await axios.get(BLOB_JWT_URL);
+    BLOB_JWT_DATA = blobRes.data;
+  });
+
+  test('# setRootCertPem', function(t) {
+    t.test('## setRootCertPem', function(t) {
+      try {
+        Accessor.setRootCertPem(PEM);
+        t.end();
+      } catch (err) {
+        let message = `${t.name}: error`;
+        if (err != null && err instanceof Error) {
+          message = err.message;
+        }
+        t.fail(message);
       }
-      t.fail(message);
-    }
-  }); 
+    }); 
 
-  t.end();
-});
+    t.end();
+  });
 
-test('# setRootCertFile', function(t) {
-  t.test('## setRootCertFile', async function(t) {
-    try {
-      const response = await axios.get(DOWNLOAD_URL, { responseType : 'arraybuffer', });
-      if (response.data == null) {
-        t.fail();
-      } else {
-        fs.writeFileSync('./test-root-r3.crt', response.data);  
+  test('# setRootCertFile', function(t) {
+    t.test('## setRootCertFile', async function(t) {
+      try {
+        fs.writeFileSync('./test-root-r3.crt', DOWNLOAD_DATA);  
         Accessor.setRootCertFile('./test-root-r3.crt');
         fs.unlinkSync('./test-root-r3.crt');
         t.end();
-      }
-    } catch (err) {
-      let message = `${t.name}: error`;
-      if (err != null && err instanceof Error) {
-        message = err.message;
-      }
-      t.fail(message);
-    }
-  }); 
-
-  t.end();
-});
-
-test('# setRootCertUrl', function(t) {
-  t.test('## setRootCertUrl', async function(t) {
-    try {
-      await Accessor.setRootCertUrl(new URL(DOWNLOAD_URL));
-      t.end();
-    } catch (err) {
-      let message = `${t.name}: error`;
-      if (err != null && err instanceof Error) {
-        message = err.message;
-      }
-      t.fail(message);
-    }
-  }); 
-
-  t.end();
-});
-
-test('# fromJwt', function(t) {
-  t.test('## fromJwt - valid', async function(t) {
-    try {
-      Accessor.detachRootCert();
-      const res = await axios.get(BLOB_JWT_URL);
-      if (typeof res.data === 'string') {
-        await Accessor.fromJwt(res.data);
-        t.end();
-      } else {
-        t.fail('Response is not valid form: ' + BLOB_JWT_URL);
-      }
-    } catch(err) {
-      let message = `${t.name}: error`;
-      if (err != null && err instanceof Error) {
-        message = err.message;
-      }
-      t.fail(message);
-    }
-  });
-
-  t.test('## fromJwt - wrong format', async function(t) {
-      const res = await axios.get(BLOB_JWT_URL);
-      const blob = res.data;
-      const [header, payload, signature] = blob.split('.');
-      Accessor.detachRootCert();
-      try {
-        await Accessor.fromJwt(header + '.' + payload);
-        t.fail();
       } catch (err) {
+        let message = `${t.name}: error`;
         if (err != null && err instanceof Error) {
-          t.equal(err.name, 'FM3AccessError');
-          t.equal(err.message, 'Blob JWT is wrong format.');
-          t.end();
-        } else {
-          t.fail();
+          message = err.message;
         }
+        t.fail(message);
       }
+    }); 
+
+    t.end();
   });
 
-  t.test('## fromJwt - set root cert pem', async function(t) {
-    try {
-      Accessor.setRootCertPem(PEM);
-      const res = await axios.get(BLOB_JWT_URL);
-      Accessor.fromJwt(res.data);
-      t.end();
-    } catch(err) {
-      let message = `${t.name}: error`;
-      if (err != null && err instanceof Error) {
-        message = err.message;
+  test('# setRootCertUrl', function(t) {
+    t.test('## setRootCertUrl', async function(t) {
+      try {
+        await Accessor.setRootCertUrl(new URL(DOWNLOAD_URL));
+        t.end();
+      } catch (err) {
+        let message = `${t.name}: error`;
+        if (err != null && err instanceof Error) {
+          message = err.message;
+        }
+        t.fail(message);
       }
-      t.fail(message);
-    }
+    }); 
+
+    t.end();
   });
 
-  t.end();
-});
-
-test('# fromFile', function(t) {
-  t.test('## fromFile', async function(t) {
-    try {
-      const res = await axios.get(BLOB_JWT_URL);
-      fs.writeFileSync('./accessor-test-mds-blob.jwt', res.data, 'utf-8');
-      await Accessor.fromFile('./accessor-test-mds-blob.jwt');
-      t.end();
-    } catch (err) {
-      let message = `${t.name}: error`;
-      if (err != null && err instanceof Error) {
-        message = err.message;
+  test('# fromJwt', function(t) {
+    t.test('## fromJwt - valid', async function(t) {
+      try {
+        await Accessor.fromJwt(BLOB_JWT_DATA);
+        t.end();
+      } catch(err) {
+        let message = `${t.name}: error`;
+        if (err != null && err instanceof Error) {
+          message = err.message;
+        }
+        t.fail(message);
       }
-      t.fail(message);
-    }
-    fs.unlinkSync('./accessor-test-mds-blob.jwt');
+    });
+
+    t.test('## fromJwt - wrong format', async function(t) {
+        const [header, payload, signature] = BLOB_JWT_DATA.split('.');
+        Accessor.detachRootCert();
+        try {
+          await Accessor.fromJwt(header + '.' + payload);
+          t.fail();
+        } catch (err) {
+          if (err != null && err instanceof Error) {
+            t.equal(err.name, 'FM3AccessError');
+            t.equal(err.message, 'Blob JWT is wrong format.');
+            t.end();
+          } else {
+            t.fail();
+          }
+        }
+    });
+
+    t.test('## fromJwt - set root cert pem', async function(t) {
+      try {
+        Accessor.fromJwt(BLOB_JWT_DATA);
+        t.end();
+      } catch(err) {
+        let message = `${t.name}: error`;
+        if (err != null && err instanceof Error) {
+          message = err.message;
+        }
+        t.fail(message);
+      }
+    });
+
+    t.end();
   });
 
-  t.end();
-});
-
-test('# fromUrl', function(t) {
-  t.test('## fromUrl', async function(t) {
-    try {
-      await Accessor.fromUrl(new URL(BLOB_JWT_URL));
-      t.end();
-    } catch (err) {
-      let message = `${t.name}: error`;
-      if (err != null && err instanceof Error) {
-        message = err.message;
+  test('# fromFile', function(t) {
+    t.test('## fromFile', async function(t) {
+      try {
+        fs.writeFileSync('./accessor-test-mds-blob.jwt', BLOB_JWT_DATA, 'utf-8');
+        await Accessor.fromFile('./accessor-test-mds-blob.jwt');
+        t.end();
+      } catch (err) {
+        let message = `${t.name}: error`;
+        if (err != null && err instanceof Error) {
+          message = err.message;
+        }
+        t.fail(message);
       }
-      t.fail(message);
-    }
+      fs.unlinkSync('./accessor-test-mds-blob.jwt');
+    });
+
+    t.end();
   });
 
-  t.end();
-});
-
-test('# toJsonObject', function(t) {
-  t.test('## toJsonObject', async function(t) {
-    try {
-      await Accessor.fromUrl(new URL(BLOB_JWT_URL));
-      const result = await Accessor.toJsonObject();
-      t.match(result.legalHeader, /[a-zA-Z0-9 \.\/-:]+/);
-      t.match(result.no, /[0-9]+/);
-      t.match(result.nextUpdate, /[0-9]{4}-[0-1]{1}[0-9]{1}-[0-1]{1}[0-9]{1}/);
-      t.ok(result.entries);
-      t.end();
-    } catch(err) {
-      let message = `${t.name}: error`;
-      if (err != null && err instanceof Error) {
-        message = err.message;
+  test('# fromUrl', function(t) {
+    t.test('## fromUrl', async function(t) {
+      try {
+        await Accessor.fromUrl(new URL(BLOB_JWT_URL));
+        t.end();
+      } catch (err) {
+        let message = `${t.name}: error`;
+        if (err != null && err instanceof Error) {
+          message = err.message;
+        }
+        t.fail(message);
       }
-      t.fail(message);
-    }
+    });
+
+    t.end();
   });
 
-  t.end();
-});
-
-test('# toFile', function(t) {
-  t.test('## toFile', async function(t) {
-    try {
-      await Accessor.fromUrl(new URL(BLOB_JWT_URL));
-      await Accessor.toFile('./test-payload.json');
-      const jsonStr = fs.readFileSync('./test-payload.json', 'utf-8');
-      const json = JSON.parse(jsonStr);
-      t.ok(json);
-      t.end();
-    } catch(err) {
-      let message = `${t.name}: error`;
-      if (err != null && err instanceof Error) {
-        message = err.message;
+  test('# toJsonObject', function(t) {
+    t.test('## toJsonObject', async function(t) {
+      try {
+        await Accessor.fromUrl(new URL(BLOB_JWT_URL));
+        const result = await Accessor.toJsonObject();
+        t.match(result.legalHeader, /[a-zA-Z0-9 \.\/-:]+/);
+        t.match(result.no, /[0-9]+/);
+        t.match(result.nextUpdate, /[0-9]{4}-[0-1]{1}[0-9]{1}-[0-1]{1}[0-9]{1}/);
+        t.ok(result.entries);
+        t.end();
+      } catch(err) {
+        let message = `${t.name}: error`;
+        if (err != null && err instanceof Error) {
+          message = err.message;
+        }
+        t.fail(message);
       }
-      t.fail(message);
-    }
-    fs.unlinkSync('./test-payload.json');
+    });
+
+    t.end();
+  });
+
+  test('# toFile', function(t) {
+    t.test('## toFile', async function(t) {
+      try {
+        await Accessor.fromUrl(new URL(BLOB_JWT_URL));
+        await Accessor.toFile('./test-payload.json');
+        const jsonStr = fs.readFileSync('./test-payload.json', 'utf-8');
+        const json = JSON.parse(jsonStr);
+        t.ok(json);
+        t.end();
+      } catch(err) {
+        let message = `${t.name}: error`;
+        if (err != null && err instanceof Error) {
+          message = err.message;
+        }
+        t.fail(message);
+      }
+      fs.unlinkSync('./test-payload.json');
+    });
+
+    t.end();
   });
 
   t.end();
