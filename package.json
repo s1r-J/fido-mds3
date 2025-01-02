@@ -1,6 +1,6 @@
 {
   "name": "fido-mds3",
-  "version": "0.4.0-20241202",
+  "version": "0.4.0-20250102",
   "description": "Module to help access to FIDO Alliance Metadata Service v3.",
   "main": "index.js",
   "types": "./dist/index.d.ts",
